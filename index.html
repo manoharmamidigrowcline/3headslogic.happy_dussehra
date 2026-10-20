@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>Happy Dussehra</title>
+    <link rel="icon" type="image/jpeg" href="/3.png" />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .scene {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        background: #000;
+        overflow: hidden;
+      }
+
+      /* ==========================================
+   DOT CANVAS
+========================================== */
+
+      #dotCanvas {
+        position: absolute;
+        inset: 0;
+
+        width: 100%;
+        height: 100%;
+
+        z-index: 2;
+      }
+
+      /* ==========================================
+   FULL IMAGE
+========================================== */
+
+      #fullImage {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        transform: translate(-50%, -50%);
+        opacity: 0;
+        z-index: 3;
+      }
+
+      /* ==========================================
+   OPTIONAL DARK BACKGROUND
+========================================== */
+
+      .blackBackground {
+        position: absolute;
+
+        inset: 0;
+
+        background: #000;
+
+        z-index: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="scene">
+      <div class="blackBackground"></div>
+
+      <canvas id="dotCanvas"></canvas>
+
+      <img id="fullImage" src="dusshehra.jpeg" alt="Sri Venkateswara Swamy" />
+    </div>
+
+    <script>
+      /* =====================================================
+   SETUP
+===================================================== */
+
+      const canvas = document.getElementById("dotCanvas");
+
+      const ctx = canvas.getContext("2d");
+
+      const image = new Image();
+
+      image.src = "dusshehra.jpeg";
+
+      const fullImage = document.getElementById("fullImage");
+
+      let dots = [];
+
+      let startTime = null;
+
+      /* =====================================================
+   SETTINGS
+===================================================== */
+
+      /*
+   Distance between dots.
+
+   3 = very detailed
+   4 = recommended
+   5 = fewer dots
+*/
+
+      const DOT_SPACING = 4;
+
+      /*
+   IMPORTANT:
+
+   Dot size NEVER changes.
+*/
+
+      const DOT_SIZE = 1.5;
+
+      /* =====================================================
+   CANVAS RESIZE
+===================================================== */
+
+      function resizeCanvas() {
+        canvas.width = window.innerWidth;
+
+        canvas.height = window.innerHeight;
+      }
+
+      resizeCanvas();
+
+      window.addEventListener("resize", () => {
+        resizeCanvas();
+
+        if (image.complete) {
+          createDots();
+        }
+      });
+
+      /* =====================================================
+   IMAGE LOAD
+===================================================== */
+
+      image.onload = () => {
+        try {
+          createDots();
+        } catch (e) {
+          // file:// protocol blocks getImageData
+          // Fallback: use grid dots without pixel color
+          createDotsFallback();
+        }
+
+        requestAnimationFrame(animate);
+      };
+
+      /* =====================================================
+   FALLBACK: dots without getImageData
+   (used when file:// blocks canvas taint)
+===================================================== */
+
+      function createDotsFallback() {
+        dots = [];
+
+        // Cover the full canvas with golden/warm dots
+        // that form a rough silhouette feel
+        for (let y = DOT_SPACING; y < canvas.height; y += DOT_SPACING) {
+          for (let x = DOT_SPACING; x < canvas.width; x += DOT_SPACING) {
+            // Warm golden color palette
+            const palette = [
+              [255, 215, 0],
+              [255, 180, 50],
+              [255, 140, 0],
+              [255, 255, 200],
+              [220, 160, 20],
+            ];
+            const c = palette[Math.floor(Math.random() * palette.length)];
+
+            const nx = x / canvas.width;
+            const ny = y / canvas.height;
+            const dx = nx - 0.5;
+            const dy = ny - 0.5;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const maxDistance = 0.707;
+            const normalizedDistance = Math.min(1, distance / maxDistance);
+            const random = Math.random() * 0.2;
+            const delay = Math.min(1, normalizedDistance * 0.85 + random);
+
+            dots.push({ x, y, r: c[0], g: c[1], b: c[2], delay });
+          }
+        }
+      }
+
+      /* =====================================================
+   CREATE DOTS FROM IMAGE
+===================================================== */
+
+      function createDots() {
+        /*
+       Temporary canvas
+       to rotate uploaded image.
+    */
+
+        const tempCanvas = document.createElement("canvas");
+        const tempCtx = tempCanvas.getContext("2d");
+
+        // Keep the original image orientation
+        tempCanvas.width = image.width;
+        tempCanvas.height = image.height;
+
+        tempCtx.drawImage(image, 0, 0, image.width, image.height);
+
+        const imageData = tempCtx.getImageData(
+          0,
+          0,
+          tempCanvas.width,
+          tempCanvas.height,
+        ).data;
+        /*
+       Fit image to screen.
+    */
+
+        const scale = Math.min(
+          canvas.width / tempCanvas.width,
+
+          canvas.height / tempCanvas.height,
+        );
+
+        const drawWidth = tempCanvas.width * scale;
+
+        const drawHeight = tempCanvas.height * scale;
+
+        const offsetX = (canvas.width - drawWidth) / 2;
+
+        const offsetY = (canvas.height - drawHeight) / 2;
+
+        dots = [];
+
+        /* ==========================================
+       SCAN IMAGE
+    ========================================== */
+
+        for (let y = 0; y < tempCanvas.height; y += DOT_SPACING) {
+          for (let x = 0; x < tempCanvas.width; x += DOT_SPACING) {
+            const index = (y * tempCanvas.width + x) * 4;
+
+            const r = imageData[index];
+
+            const g = imageData[index + 1];
+
+            const b = imageData[index + 2];
+
+            const alpha = imageData[index + 3];
+
+            /*
+               Ignore transparent pixels.
+            */
+
+            if (alpha < 40) {
+              continue;
+            }
+
+            /*
+               Ignore almost-black pixels.
+
+               This keeps the background black.
+            */
+
+            const brightness = (r + g + b) / 3;
+
+            if (brightness < 15) {
+              continue;
+            }
+
+            const screenX = offsetX + x * scale;
+
+            const screenY = offsetY + y * scale;
+
+            /*
+               PURE RANDOM REVEAL
+
+               Every dot gets a completely
+               random appearance time.
+
+               Math.pow(..., 0.75) keeps it
+               random but naturally spread —
+               avoids clumping.
+            */
+
+            const delay = Math.pow(Math.random(), 0.75);
+
+            dots.push({
+              x: screenX,
+
+              y: screenY,
+
+              r: r,
+
+              g: g,
+
+              b: b,
+
+              delay: delay,
+            });
+          }
+        }
+      }
+
+      /* =====================================================
+   10 SECOND ANIMATION
+===================================================== */
+
+      function animate(timestamp) {
+        if (!startTime) {
+          startTime = timestamp;
+        }
+
+        const elapsed = (timestamp - startTime) / 1000;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        /* =================================================
+       0 – 1 SECOND
+       PURE BLACK
+    ================================================= */
+
+        if (elapsed < 1) {
+          requestAnimationFrame(animate);
+
+          return;
+        }
+
+        /* =================================================
+       1 – 8 SECONDS
+       DOTS APPEAR
+    ================================================= */
+
+        const dotStart = 1;
+
+        const dotDuration = 5;
+
+        let progress = (elapsed - dotStart) / dotDuration;
+
+        progress = Math.max(0, Math.min(1, progress));
+
+        /*
+       Draw dots.
+    */
+
+        for (const dot of dots) {
+          /*
+           Has this dot appeared yet?
+        */
+
+          if (progress < dot.delay) {
+            continue;
+          }
+
+          /*
+           =====================================
+           FIXED DOT SIZE
+           =====================================
+
+           NEVER increases.
+        */
+
+          ctx.beginPath();
+
+          ctx.arc(dot.x, dot.y, DOT_SIZE, 0, Math.PI * 2);
+
+          /*
+           Use original image color.
+        */
+
+          ctx.fillStyle = `rgb(
+                ${dot.r},
+                ${dot.g},
+                ${dot.b}
+            )`;
+
+          ctx.fill();
+        }
+
+        /* =================================================
+       6 – 7 SECONDS
+       FULL IMAGE
+    ================================================= */
+
+        if (elapsed >= 6) {
+          const imageProgress = Math.min(1, (elapsed - 6) / 1);
+
+          fullImage.style.opacity = imageProgress;
+        }
+
+        /* =================================================
+       STOP AT EXACTLY 7 SECONDS
+       Fill mode: keep last frame frozen
+    ================================================= */
+
+        if (elapsed < 7) {
+          requestAnimationFrame(animate);
+        } else {
+          /*
+           Fill mode — forwards:
+
+           Draw all dots at progress = 1
+           so every dot is visible.
+           Canvas stays frozen at full image.
+        */
+
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+          for (const dot of dots) {
+            ctx.beginPath();
+
+            ctx.arc(dot.x, dot.y, DOT_SIZE, 0, Math.PI * 2);
+
+            ctx.fillStyle = `rgb(${dot.r},${dot.g},${dot.b})`;
+
+            ctx.fill();
+          }
+
+          /*
+           Image fill mode — stay at opacity 1
+        */
+
+          fullImage.style.opacity = "1";
+          fullImage.style.transition = "none";
+        }
+      }
+    </script>
+  </body>
+</html>
